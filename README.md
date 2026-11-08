@@ -43,3 +43,81 @@ Sistem dibangun di atas lingkungan virtualisasi **Oracle VM VirtualBox** dengan 
 ├── inventory.ini         # Berkas Ansible inventory pemetaan grup target & kredensial SSH
 ├── playbook.yaml         # Playbook otomasi LEMP stack & setup WordPress
 └── README.md             # Dokumentasi teknis proyek
+```
+
+## ⚙️ Ringkasan Alur Otomasi (Playbook)
+Playbook playbook.yaml mengeksekusi tahapan otomatisasi berikut:
+
+1. Database Server (192.168.56.11)
+Memperbarui cache repositori paket (apt update).
+
+Menginstalasi paket mariadb-server dan python3-pymysql.
+
+Mengaktifkan dan memastikan layanan sistem MariaDB berjalan (running & enabled).
+
+Membuka parameter bind-address = 0.0.0.0 pada konfigurasi MariaDB agar port 3306 dapat diakses dari Web Server.
+
+Membuat basis data baru: wordpress_db.
+
+Membuat pengguna database baru: wp_user dengan izin akses penuh (ALL PRIVILEGES) dari host remote (%).
+
+2. Web Server (192.168.56.10)
+Menginstalasi paket web server nginx, mesin pemroses php-fpm, driver php-mysql, serta pustaka utilitas curl dan tar.
+
+Mengunduh arsip WordPress rilis terbaru langsung dari sumber resmi (https://wordpress.org/latest.tar.gz).
+
+Mengekstrak arsip ke direktori /var/www/html/wordpress.
+
+Mengonfigurasi parameter berkas wp-config.php:
+
+DB_NAME = wordpress_db
+
+DB_USER = wp_user
+
+DB_PASSWORD = wp_password123
+
+DB_HOST = 192.168.56.11 (menunjuk ke IP Database Server)
+
+Memberikan izin kepemilikan direktori kepada akun layanan web server (www-data:www-data).
+
+Mengonfigurasi Virtual Host Nginx untuk menyajikan WordPress dan meneruskan skrip PHP ke socket aktif PHP-FPM.
+
+Memuat ulang (restart) layanan Nginx.
+
+##🚀 Panduan Menjalankan Proyek
+
+1. Inisialisasi Mesin Target (Host OS Windows)
+
+Jalankan VM Web Server pada direktori proyek web:
+cd C:\direktori_web_mu\foldermu
+vagrant up
+
+Jalankan VM Database Server pada direktori Proyek DB:
+cd C:\direktori_db_mu\foldermu
+vagrant up
+
+2. Eksekusi Ansible(Control Node)
+
+Buka terminal pada Control Node, masuk ke direktori kerja proyek:
+cd ~/proyekmu
+
+Uji konektivitas Ansible ke seluruh node target:
+ansible all -i inventory.ini -m ping
+
+jalankan playbook otomatisasi LEMP dan WordPress:
+ansible-playbook -i inventory.ini playbook.yaml
+
+📊 Hasil Pengujian & Verifikasi
+Hasil Eksekusi Ansible (PLAY RECAP):
+
+Target 192.168.56.10: ok=16, changed=13, unreachable=0, failed=0
+
+Target 192.168.56.11: ok=8, changed=5, unreachable=0, failed=0
+
+Pengujian Respons HTTP:
+
+Respons curl lokal http://localhost dari Web Server mengembalikan status HTTP/1.1 302 Found yang diarahkan langsung oleh WordPress ke /wp-admin/install.php.
+
+Akses Browser:
+
+WordPress berhasil diakses dari peramban sistem Host di alamat http://192.168.56.10/wp-admin/install.php dan instalasi berhasil terhubung penuh ke MariaDB di VM DB Server.
