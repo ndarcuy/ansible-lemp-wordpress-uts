@@ -5,14 +5,6 @@ Repositori ini berisi seluruh berkas konfigurasi infrastruktur sebagai kode (*In
 
 ---
 
-## 👨‍💻 Identitas Mahasiswa
-* **Nama** : Cahyo Ndaru Suryo Bawono
-* **NIM** : 112025002
-* **Program Studi / Kampus** : Politeknik NSC Surabaya
-* **Mata Kuliah** : Komputasi Awan
-
----
-
 ## 📌 Deskripsi Proyek
 Proyek ini mengimplementasikan pemisahan layanan web dan basis data ke dalam dua server target yang berbeda (*Multi-Tier Architecture*):
 1. **VM 1 (Web Server)**: Menjalankan Nginx, modul PHP-FPM, dan source code aplikasi web WordPress.
