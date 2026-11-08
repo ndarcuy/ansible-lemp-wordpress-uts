@@ -1,0 +1,162 @@
+# 1. SETUP DATABASE SERVER (MariaDB di 192.168.56.11)
+- name: Konfigurasi Database Server
+  hosts: dbservers
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install MariaDB Server dan library Python MySQL
+      apt:
+        name:
+          - mariadb-server
+          - python3-pymysql
+        state: present
+
+    - name: Pastikan MariaDB berjalan
+      service:
+        name: mariadb
+        state: started
+        enabled: yes
+
+    - name: Buka bind-address MariaDB agar bisa diakses dari Web Server
+      lineinfile:
+        path: /etc/mysql/mariadb.conf.d/50-server.cnf
+        regexp: '^bind-address'
+        line: 'bind-address = 0.0.0.0'
+      notify: Restart MariaDB
+
+    - name: Buat database WordPress
+      mysql_db:
+        name: wordpress_db
+        state: present
+        login_unix_socket: /run/mysqld/mysqld.sock
+
+    - name: Buat user database WordPress
+      mysql_user:
+        name: wp_user
+        password: wp_password123
+        priv: 'wordpress_db.*:ALL'
+        host: '%'
+        state: present
+        login_unix_socket: /run/mysqld/mysqld.sock
+
+  handlers:
+    - name: Restart MariaDB
+      service:
+        name: mariadb
+        state: restarted
+
+# 2. SETUP WEB SERVER (Nginx + PHP + WordPress di 192.168.56.10)
+- name: Konfigurasi Web Server dan WordPress
+  hosts: webservers
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install Nginx, PHP-FPM, PHP-MySQL, curl, dan tar
+      apt:
+        name:
+          - nginx
+          - php-fpm
+          - php-mysql
+          - curl
+          - tar
+        state: present
+
+    - name: Unduh WordPress source terbaru
+      get_url:
+        url: https://wordpress.org/latest.tar.gz
+        dest: /tmp/latest.tar.gz
+
+    - name: Ekstrak WordPress ke /var/www/html
+      unarchive:
+        src: /tmp/latest.tar.gz
+        dest: /var/www/html/
+        remote_src: yes
+
+    - name: Buat file wp-config.php dari sample
+      copy:
+        src: /var/www/html/wordpress/wp-config-sample.php
+        dest: /var/www/html/wordpress/wp-config.php
+        remote_src: yes
+        force: no
+
+    - name: Set Nama Database di wp-config.php
+      lineinfile:
+        path: /var/www/html/wordpress/wp-config.php
+        regexp: "define\\(\\s*'DB_NAME'"
+        line: "define( 'DB_NAME', 'wordpress_db' );"
+
+    - name: Set User Database di wp-config.php
+      lineinfile:
+        path: /var/www/html/wordpress/wp-config.php
+        regexp: "define\\(\\s*'DB_USER'"
+        line: "define( 'DB_USER', 'wp_user' );"
+
+    - name: Set Password Database di wp-config.php
+      lineinfile:
+        path: /var/www/html/wordpress/wp-config.php
+        regexp: "define\\(\\s*'DB_PASSWORD'"
+        line: "define( 'DB_PASSWORD', 'wp_password123' );"
+
+    - name: Set Host Database menunjuk ke IP DB Server (192.168.56.11)
+      lineinfile:
+        path: /var/www/html/wordpress/wp-config.php
+        regexp: "define\\(\\s*'DB_HOST'"
+        line: "define( 'DB_HOST', '192.168.56.11' );"
+
+    - name: Atur permission www-data untuk WordPress
+      file:
+        path: /var/www/html/wordpress
+        owner: www-data
+        group: www-data
+        recurse: yes
+
+    - name: Ambil socket path PHP-FPM yang aktif
+      shell: "find /run/php/ -name 'php*-fpm.sock' | head -n 1"
+      register: php_socket
+      changed_when: false
+
+    - name: Pasang konfigurasi Virtual Host Nginx WordPress
+      copy:
+        dest: /etc/nginx/sites-available/wordpress
+        content: |
+          server {
+              listen 80;
+              server_name 192.168.56.10;
+              root /var/www/html/wordpress;
+              index index.php index.html index.htm;
+
+              location / {
+                  try_files $uri $uri/ /index.php?$args;
+              }
+
+              location ~ \.php$ {
+                  include snippets/fastcgi-php.conf;
+                  fastcgi_pass unix:{{ php_socket.stdout }};
+              }
+
+              location ~ /\.ht {
+                  deny all;
+              }
+          }
+
+    - name: Aktifkan site WordPress di Nginx
+      file:
+        src: /etc/nginx/sites-available/wordpress
+        dest: /etc/nginx/sites-enabled/wordpress
+        state: link
+
+    - name: Nonaktifkan konfigurasi default Nginx
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted
